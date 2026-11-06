@@ -186,6 +186,7 @@ a.pill{text-decoration:none}
 .live .ln{font:900 30px/1 Montserrat,"Arial Black",var(--bf);min-width:62px;text-align:center}
 .live .lt b{display:block;font:800 17px/1.2 var(--bf)}.live .lt span{display:block;font-size:13px;opacity:.9;margin-top:2px}
 .stl{font:800 20px var(--bf);color:var(--g);margin:6px 0 2px}
+.live.bad{background:linear-gradient(135deg,#b3412f,#8f2f21);color:#fff}
 </style>
 </head>
 <body>
@@ -458,17 +459,25 @@ const ORDERS_URL=(window.CONFIG&&window.CONFIG.ORDERS_URL)||"";
 let liveT=null,liveHide=null;
 const getLive=()=>{try{return JSON.parse(localStorage.getItem("lg_live")||"null")}catch(e){return null}};
 const setLive=L=>{try{L?localStorage.setItem("lg_live",JSON.stringify(L)):localStorage.removeItem("lg_live")}catch(e){}};
+function stText(L){
+ if(L.st=="declined")return "❌ Заказ не принят"+(L.reason?": "+L.reason:"");
+ if(L.st=="ready")return "✅ Готов! Забирай у стойки";
+ if(L.st=="cooking")return "🔥 Готовится";
+ return "⏳ Ждём подтверждения бариста";
+}
 function paintLive(L,msg){
  let big="",txt="",cls="",sub="";
  if(msg){txt=msg;cls=" ready"}
  else if(L){
   if(L.fail){txt="Заказ не отправился автоматически — отправь его кнопкой Telegram или ВК"}
-  else{big=L.id?"№"+L.id:"…";txt=L.st=="ready"?"✅ Готов! Забирай у стойки":"🔥 Готовится";cls=L.st=="ready"?" ready":"";sub=(L.name?esc(L.name)+", с":"С")+"татус обновляется сам"}
+  else{big=L.id?"№"+L.id:"…";txt=esc(stText(L));cls=L.st=="ready"?" ready":(L.st=="declined"?" bad":"");
+   sub=L.st=="declined"?"Извини! Можно выбрать что-то другое и заказать снова":(L.st=="cooking"||L.st=="ready"?"Статус обновляется сам":"Бариста скоро подтвердит заказ")}
  }
  $("live").innerHTML=(big||txt)?`<div class="live${cls}"><div class="ln">${big}</div><div class="lt"><b>${txt}</b>${sub?`<span>${sub}</span>`:""}</div></div>`:"";
  const n=$("ordn"),s=$("ordst");
  if(n&&L&&!L.fail)n.textContent=L.id?"№"+L.id:"…";
- if(s)s.textContent=msg||(L?(L.fail?"Не удалось отправить автоматически — нажми кнопку ниже":(L.st=="ready"?"✅ Готов! Забирай у стойки":"🔥 Готовится")):"");
+ if(s)s.textContent=msg||(L?(L.fail?"Не удалось отправить автоматически — нажми кнопку ниже":stText(L)):"");
+ if(n&&s){const dec=!!(L&&L.st=="declined"&&!msg),hd=n.parentNode.querySelector("h2");n.style.display=dec?"none":"";s.style.color=dec?"#b3412f":"";if(hd)hd.textContent=dec?"Заказ не принят":(ORDERS_URL?"Заказ отправлен ☕":hd.textContent);}
 }
 function watch(){
  clearTimeout(liveT);
@@ -478,8 +487,10 @@ function watch(){
  fetch(ORDERS_URL+(ORDERS_URL.indexOf("?")>-1?"&":"?")+"t="+Date.now()).then(r=>r.json()).then(r=>{
   const o=(r.orders||[]).find(x=>x.cid===L.cid);
   if(o){
-   if(o.status=="ready"&&L.st!="ready"&&navigator.vibrate){try{navigator.vibrate([200,100,200])}catch(e){}}
-   L.seen=1;L.id=o.id;L.st=o.status;setLive(L);paintLive(L);
+   if((o.status=="ready"||o.status=="declined")&&L.st!=o.status&&navigator.vibrate){try{navigator.vibrate([200,100,200])}catch(e){}}
+   L.seen=1;L.id=o.id;L.st=o.status;L.reason=o.reason||"";
+   if(o.status=="declined"){setLive(null);paintLive(L);return}
+   setLive(L);paintLive(L);
   }else if(L.seen){
    setLive(null);paintLive(null,"Заказ выдан — приятного ☕");clearTimeout(liveHide);liveHide=setTimeout(()=>paintLive(null),12000);return;
   }else if(Date.now()-L.t>60000){fail();return}
