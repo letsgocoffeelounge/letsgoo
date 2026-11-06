@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Заказы — Let’s go Coffee Lounge</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&family=Nunito:wght@700;800&display=swap">
+<script src="config.js"></script>
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:radial-gradient(60vw 40vh at 90% 100%,rgba(255,170,80,.25),transparent 70%),linear-gradient(160deg,#14573a,#0c3d27);color:#fff3df;font-family:Nunito,Arial,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;justify-content:space-between;padding:1.6vh 2.5vw;background:#0a2f1f}
+.logo{font:900 3.6vh Montserrat,"Arial Black",sans-serif;color:#f2cb7c;letter-spacing:.1em;text-transform:uppercase}
+.clock{font:900 4vh Montserrat,sans-serif}
+main{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:2vw;padding:2vh 2.5vw 6vh;min-height:0}
+section{border-radius:2vh;padding:2vh 1.6vw;display:flex;flex-direction:column;min-height:0}
+.cook{background:rgba(255,170,60,.12);border:.3vh solid rgba(255,190,90,.45)}
+.rdy{background:rgba(52,181,131,.18);border:.3vh solid rgba(91,224,165,.65)}
+h2{margin:0 0 1.5vh;font:900 4.4vh Montserrat,sans-serif;text-transform:uppercase;letter-spacing:.06em}
+.cook h2{color:#ffbf5a}.rdy h2{color:#5be0a5}
+.list{display:flex;flex-wrap:wrap;gap:1.4vh 1.2vw;align-content:flex-start;overflow:hidden}
+.card{background:#0a2f1f;border-radius:1.8vh;padding:1.2vh 1.6vw;min-width:14vw;text-align:center}
+.card b{display:block;font:900 8vh/1 Montserrat,sans-serif}
+.card span{display:block;font:800 3.2vh Nunito,sans-serif;margin-top:.6vh;max-width:18vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cook .card b{color:#ffbf5a}.rdy .card b{color:#5be0a5}
+.card.new{animation:pulse 1s ease-in-out 8}
+@keyframes pulse{50%{transform:scale(1.08);box-shadow:0 0 4vh #5be0a5}}
+.empty{font:800 3.2vh Nunito,sans-serif;opacity:.6;padding:1vh 0}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:.8vh 2vw;font:700 2vh Nunito,sans-serif;background:rgba(0,0,0,.55);display:flex;gap:1.5vw;justify-content:space-between;align-items:center}
+.bar button{background:#f2cb7c;color:#0a2f1f;border:0;border-radius:1vh;padding:.7vh 1.4vw;font:800 2vh Nunito,sans-serif;cursor:pointer}
+.bar .err{color:#ffb4b4}
+@media (max-aspect-ratio:1/1){main{grid-template-columns:1fr}.card{min-width:30vw}.card span{max-width:40vw}}
+</style>
+</head>
+<body>
+<header><div class="logo">Let’s go Coffee Lounge</div><div class="clock" id="clock"></div></header>
+<main>
+ <section class="cook"><h2>🔥 Готовится</h2><div class="list" id="cook"></div></section>
+ <section class="rdy"><h2>✅ Готовы</h2><div class="list" id="rdy"></div></section>
+</main>
+<div class="bar"><span id="st">Загрузка…</span><span><button id="snd">🔊 Включить звук</button> <button id="fs">⛶ Во весь экран</button></span></div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const URL_=(window.CONFIG&&window.CONFIG.ORDERS_URL)||"";
+let seen=new Set(),first=true,audioOn=false,ctx=null;
+const two=n=>String(n).padStart(2,"0");
+function tick(){const d=new Date();$("clock").textContent=two(d.getHours())+":"+two(d.getMinutes());}
+setInterval(tick,1000);tick();
+function beep(){if(!audioOn)return;try{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();[880,1175].forEach((f,i)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.value=f;o.connect(g);g.connect(ctx.destination);const t=ctx.currentTime+i*.22;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.3,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.2);o.start(t);o.stop(t+.22);});}catch(e){}}
+$("snd").onclick=()=>{audioOn=true;beep();$("snd").style.display="none";};
+$("fs").onclick=()=>{const el=document.documentElement;(el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el);};
+const cards=(l,newIds)=>l.map(o=>`<div class="card${newIds&&newIds.has(o.id)?" new":""}"><b>${esc(o.id)}</b><span>${esc(o.name)}</span></div>`).join("");
+function draw(all){
+ const cook=all.filter(o=>o.status=="cooking"),rdy=all.filter(o=>o.status=="ready");
+ const fresh=new Set(rdy.filter(o=>!seen.has(o.id)).map(o=>o.id));
+ $("cook").innerHTML=cards(cook)||'<div class="empty">Пока нет заказов</div>';
+ $("rdy").innerHTML=cards(rdy,first?null:fresh)||'<div class="empty">—</div>';
+ if(!first&&fresh.size)beep();
+ rdy.forEach(o=>seen.add(o.id));first=false;
+}
+async function load(){
+ if(!URL_){$("st").innerHTML='<span class="err">Адрес заказов не настроен (файл config.js)</span>';return;}
+ try{
+  const r=await (await fetch(URL_+(URL_.indexOf("?")>-1?"&":"?")+"t="+Date.now(),{cache:"no-store"})).json();
+  const now=Date.now();
+  draw((r.orders||[]).filter(o=>o.status=="cooking"||(o.status=="ready"&&now-(o.u||now)<30*60000)).sort((a,b)=>(+a.id)-(+b.id)));
+  const d=new Date();$("st").textContent="Обновлено "+two(d.getHours())+":"+two(d.getMinutes())+":"+two(d.getSeconds());
+ }catch(e){$("st").innerHTML='<span class="err">Нет связи с сервером, пробую снова…</span>';}
+}
+load();setInterval(load,4000);
+try{navigator.wakeLock&&navigator.wakeLock.request("screen").catch(function(){});}catch(e){}
+</script>
+</body>
+</html>

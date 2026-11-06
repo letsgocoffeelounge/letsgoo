@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Панель бариста — Let’s go</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800&display=swap">
+<script src="config.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3e3cb;color:#3b2418;font:16px/1.4 Nunito,-apple-system,Arial,sans-serif;padding-bottom:40px}
+header{background:#17573a;color:#f2cb7c;padding:calc(14px + env(safe-area-inset-top,0px)) 16px 14px;display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:18px}
+header button{background:rgba(0,0,0,.25);color:#fff;border:0;border-radius:10px;padding:8px 12px;font-size:16px}
+main,#login{padding:12px 14px}
+h2{font-size:20px;margin:18px 0 8px}
+.oc{background:#fbf1e1;border:1px solid #dcc1a0;border-left:7px solid #c2703d;border-radius:16px;padding:12px 14px;margin:10px 0;box-shadow:0 4px 12px rgba(80,40,10,.12)}
+.oc.rdy{border-left-color:#1f8a56}.oc.new{animation:fl 1s ease 4}
+@keyframes fl{50%{background:#fff0b8}}
+.oh{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.oh b{font-size:26px}.oh span{font-size:18px;font-weight:800}.oh small{color:#8a6a52;margin-left:auto}
+.ow{font-weight:800;margin:4px 0;color:#9a4a12}
+pre{margin:6px 0;font:600 15px/1.35 Nunito,Arial,sans-serif;white-space:pre-wrap}
+.ot{font-weight:800}.gift{background:#e5f6ec;color:#17573a;border-radius:8px;padding:2px 8px;font-weight:800}
+.on{margin-top:6px;background:#fff0d6;border-radius:10px;padding:6px 10px}
+.btns{display:flex;gap:8px;margin-top:10px}
+.btns button{flex:1;border:0;border-radius:12px;padding:12px;font:800 16px Nunito,Arial,sans-serif;background:#17573a;color:#fff}
+.btns button.alt{flex:none;background:#fbf1e1;color:#3b2418;border:1.5px solid #dcc1a0}
+input{width:100%;padding:12px;border:1.5px solid #dcc1a0;border-radius:12px;font:inherit;background:#fbf1e1;margin:8px 0}
+#login button{width:100%;padding:13px;border:0;border-radius:12px;background:#17573a;color:#fff;font:800 17px Nunito,Arial,sans-serif}
+.mut{color:#8a6a52;font-size:14px}.err{color:#c0322d;font-weight:800}
+</style>
+</head>
+<body>
+<header><span>☕ Панель бариста</span><button id="snd" aria-label="Звук">🔕</button></header>
+<div id="login" hidden><h2>Введите пароль</h2><input id="key" type="password" autocomplete="current-password" placeholder="Пароль бариста"><button id="go">Войти</button><p class="err" id="err"></p></div>
+<main id="app" hidden>
+ <h2>🔥 Готовится <span id="c1" class="mut"></span></h2><div id="cook"></div>
+ <h2>✅ Готовы, ждут гостя <span id="c2" class="mut"></span></h2><div id="rdy"></div>
+ <p class="mut" id="st"></p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const URL_=(window.CONFIG&&window.CONFIG.ORDERS_URL)||"";
+let key="",orders=[],known=new Set(),first=true,sound=false,ctx=null,timer=null;
+try{key=localStorage.getItem("lg_key")||""}catch(e){}
+function beep(){if(!sound)return;try{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();[784,1047].forEach((f,i)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.value=f;o.connect(g);g.connect(ctx.destination);const t=ctx.currentTime+i*.2;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.3,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.18);o.start(t);o.stop(t+.2);});}catch(e){}}
+$("snd").onclick=()=>{sound=!sound;$("snd").textContent=sound?"🔔":"🔕";beep();};
+function show(loggedIn){$("login").hidden=loggedIn;$("app").hidden=!loggedIn;}
+function ago(t){const m=Math.max(0,Math.round((Date.now()-t)/60000));return m<1?"только что":m+" мин назад";}
+function card(o,isNew){
+ const ready=o.status=="ready";
+ return `<div class="oc ${ready?"rdy":""}${isNew?" new":""}"><div class="oh"><b>№${esc(o.id)}</b><span>${esc(o.fullName||o.name)}</span><small>${ago(o.t)}</small></div>
+ <div class="ow">🕓 ${esc(o.when)}</div><pre>${esc(o.items)}</pre>
+ <div class="ot">${esc(o.total)} ₽${o.card?` · Карта: <span class="${String(o.card).indexOf("🎁")>-1?"gift":""}">${esc(o.card)}</span>`:""}</div>
+ ${o.note?`<div class="on">💬 ${esc(o.note)}</div>`:""}
+ <div class="btns">${ready?`<button data-a="done" data-id="${esc(o.id)}">📦 Выдан</button><button class="alt" data-a="cooking" data-id="${esc(o.id)}">↩ В готовку</button>`:`<button data-a="ready" data-id="${esc(o.id)}">✅ Готов</button><button class="alt" data-a="cancel" data-id="${esc(o.id)}">Отмена</button>`}</div></div>`;
+}
+function draw(){
+ const fresh=new Set(orders.filter(o=>!known.has(o.id)).map(o=>o.id));
+ const c=orders.filter(o=>o.status=="cooking"),r=orders.filter(o=>o.status=="ready");
+ $("cook").innerHTML=c.map(o=>card(o,!first&&fresh.has(o.id))).join("")||'<p class="mut">Нет заказов</p>';
+ $("rdy").innerHTML=r.map(o=>card(o,false)).join("")||'<p class="mut">—</p>';
+ $("c1").textContent=c.length?"("+c.length+")":"";$("c2").textContent=r.length?"("+r.length+")":"";
+ if(!first&&fresh.size)beep();
+ orders.forEach(o=>known.add(o.id));first=false;
+}
+async function load(){
+ if(!URL_){show(false);$("err").textContent="Адрес заказов не настроен (файл config.js)";return;}
+ if(!key){show(false);return;}
+ try{
+  const r=await (await fetch(URL_+(URL_.indexOf("?")>-1?"&":"?")+"key="+encodeURIComponent(key)+"&t="+Date.now(),{cache:"no-store"})).json();
+  if(!r.staff){key="";try{localStorage.removeItem("lg_key")}catch(e){}show(false);$("err").textContent="Неверный пароль";return;}
+  orders=(r.orders||[]).sort((a,b)=>(+a.id)-(+b.id));show(true);draw();
+  const d=new Date();$("st").textContent="Обновляется само · "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")+":"+String(d.getSeconds()).padStart(2,"0");
+ }catch(e){$("st").textContent="Нет связи, пробую снова…";}
+}
+$("go").onclick=()=>{key=$("key").value.trim();if(!key)return;try{localStorage.setItem("lg_key",key)}catch(e){}$("err").textContent="";load();};
+$("app").onclick=e=>{
+ const a=e.target.dataset.a,id=e.target.dataset.id;if(!a||!id)return;
+ const o=orders.find(x=>x.id==id);if(o){if(a=="done"||a=="cancel")orders=orders.filter(x=>x.id!=id);else o.status=a;draw();}
+ fetch(URL_,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"status",key,id,st:a})}).catch(()=>{});
+ setTimeout(load,1500);
+};
+load();timer=setInterval(load,5000);
+</script>
+</body>
+</html>
