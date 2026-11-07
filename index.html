@@ -187,10 +187,14 @@ a.pill{text-decoration:none}
 .live .lt b{display:block;font:800 17px/1.2 var(--bf)}.live .lt span{display:block;font-size:13px;opacity:.9;margin-top:2px}
 .stl{font:800 20px var(--bf);color:var(--g);margin:6px 0 2px}
 .live.bad{background:linear-gradient(135deg,#b3412f,#8f2f21);color:#fff}
+
+.shut>div{margin:14px 16px 0;padding:12px 16px;border-radius:18px;background:var(--card);color:var(--ink);border-left:6px solid #c26a0e;font-weight:700;font-size:15px;box-shadow:0 6px 16px rgba(80,40,10,.12)}
+.shutmsg{margin:14px 0 0;padding:12px 14px;border-radius:14px;background:var(--card);border-left:6px solid #c26a0e;font-weight:700;color:var(--ink)}
 </style>
 </head>
 <body>
 <header class="hero"><button class="theme" id="theme" type="button" aria-label="Сменить тему: тёмная или светлая">🌙</button><svg class="garland" viewBox="0 0 400 46" preserveAspectRatio="xMidYMin slice" aria-hidden="true"><path d="M-5 4 Q50 44 100 12 Q150 44 200 12 Q250 44 300 12 Q350 44 405 6"/><circle cx="50" cy="24" r="5"/><circle cx="100" cy="12" r="5"/><circle cx="150" cy="24" r="5"/><circle cx="200" cy="12" r="5"/><circle cx="250" cy="24" r="5"/><circle cx="300" cy="12" r="5"/><circle cx="350" cy="24" r="5"/></svg><div class="t"><div class="logo"><span class="l1">Let’s go</span><span class="l2">Coffee</span><span class="l3">Lounge</span></div><p class="sub">кофе после танцев — заказывай с телефона и забирай тёплым</p><span class="hrs" id="hrs">🕓 Пн–Пт 16:30–21:00 · каб. 404</span><button class="hrs" id="a2hs" type="button">📲 На главный экран</button></div></header>
+<section class="shut" id="shut"></section>
 <section id="live"></section>
 <section class="wish" id="wish"></section>
 <section id="loy"></section>
@@ -296,7 +300,7 @@ function checkout(){
   `<div class="lbl">Как тебя зовут?</div><input id="nm" placeholder="Имя" value="${esc(name)}">`+
   `<div class="lbl">Когда забрать</div><div class="chips">${WHEN.map(w=>`<button class="chip ${w==when?"on":""}" data-w="${w}">${w}</button>`).join("")}</div>`+
   (when=="После занятия"?`<div class="lbl">Во сколько именно?</div><input id="tm" type="time" step="300" value="${whenT}"><p class="hint" style="text-align:left">Мы работаем 16:30–21:00</p>`:"")+`<div class="lbl">Пожелания</div><textarea id="nt" rows="2" placeholder="Например: овсяное молоко, без сахара">${esc(note)}</textarea>`+
-  `<button class="big" id="send">Отправить бариста</button>`;
+  (orderOpen().open?`<button class="big" id="send">Отправить бариста</button>`:`<p class="shutmsg">⏰ ${esc(orderOpen().msg)}</p>`);
  };
  const text=()=>{
   return `Заказ · Let’s go Coffee Lounge\nИмя: ${name||"—"}\nЗабрать: ${when}${when=="После занятия"&&whenT?" в "+whenT:""}\nКарта: ${stamps>=NEED?"🎁 следующий бесплатный":stamps+" из "+NEED}\n\n`+cart.map(x=>`• ${x.n}${x.o?" ("+x.o+")":""} × ${x.q} — ${x.p*x.q} ₽`).join("\n")+`\n\nИтого: ${total()} ₽`+(note?`\nПожелания: ${note}`:"");
@@ -312,7 +316,7 @@ function checkout(){
    if(d.w!==undefined)when=d.w;
    upd(); if(!cart.length){close("ov2");return;} draw();
   } else if(e.target.id=="send"){
-   keep(); if(!name){$("nm").focus();$("nm").style.borderColor="#d33";return;}
+   keep(); if(!orderOpen().open){draw();return;} if(!name){$("nm").focus();$("nm").style.borderColor="#d33";return;}
    if(when=="После занятия"&&(!whenT||whenT<"16:30"||whenT>"21:00")){$("tm").focus();$("tm").style.borderColor="#d33";$("tm").scrollIntoView({block:"center"});return;}
    const t=text(), enc=encodeURIComponent(t), num=Math.floor(100+Math.random()*900);
    if(ORDERS_URL){
@@ -499,18 +503,25 @@ function watch(){
  }).catch(()=>{if(Date.now()-L.t>60000){fail();return}liveT=setTimeout(watch,6000)});
 }
 const CC={"Новинки":"#c26a0e","Кофе":"#a85a2a","Холодный кофе":"#2c6e8a","Лимонад":"#c23c66","Смузи":"#4f7a1e","Чай":"#17684a","Еда":"#9a6b1f","Сувениры":"#b0356a","Вода":"#3a7ca5","Избранное":"#d9335f"};
+// ===== Часы приёма заказов (по Москве; поменять можно здесь) =====
+const ORDER_FROM=16*60,ORDER_TO=20*60,ORDER_DAYS=[1,2,3,4,5];   // 0 = воскресенье … 6 = суббота
+function mskNow(){const d=new Date(Date.now()+3*3600e3);return {day:d.getUTCDay(),min:d.getUTCHours()*60+d.getUTCMinutes()};}
+function orderOpen(){
+ const n=mskNow(),inDay=ORDER_DAYS.indexOf(n.day)>=0;
+ if(inDay&&n.min>=ORDER_FROM&&n.min<ORDER_TO)return {open:true,msg:"🟢 Принимаем заказы до 20:00 (МСК)",next:""};
+ let next;
+ if(inDay&&n.min<ORDER_FROM)next="сегодня в 16:00";
+ else{let k=1;while(k<=7&&ORDER_DAYS.indexOf((n.day+k)%7)<0)k++;next=k==1?"завтра в 16:00":["в воскресенье","в понедельник","во вторник","в среду","в четверг","в пятницу","в субботу"][(n.day+k)%7]+" в 16:00";}
+ return {open:false,next:next,msg:"Заказы принимаем Пн–Пт с 16:00 до 20:00 по МСК. Сейчас закрыто, следующий приём "+next+". Меню можно смотреть и сейчас."};
+}
 function openNow(){
- const d=new Date(),day=d.getDay(),m=d.getHours()*60+d.getMinutes(),wd=day>=1&&day<=5;
- let t;
- if(wd&&m>=990&&m<1260)t="🟢 Сейчас открыто до 21:00";
- else if(wd&&m<990)t="Откроемся сегодня в 16:30 — можно заказать заранее";
- else if(day>=1&&day<=4)t="Откроемся завтра в 16:30 — можно заказать заранее";
- else t="Откроемся в понедельник в 16:30";
- $("open").textContent=t;
- const h=document.getElementById("hrs"); if(h)h.textContent=t.startsWith("🟢")?"🟢 Открыто до 21:00":"🕓 Пн–Пт 16:30–21:00 · каб. 404";
+ const o=orderOpen();
+ $("open").textContent=o.open?o.msg:"Заказы: Пн–Пт 16:00–20:00 (МСК). Следующий приём "+o.next;
+ const h=document.getElementById("hrs");if(h)h.textContent=o.open?"🟢 Заказы до 20:00 (МСК)":"🕓 Пн–Пт 16:30–21:00 · каб. 404";
+ $("shut").innerHTML=o.open?"":`<div>⏰ ${esc(o.msg)}</div>`;
 }
 document.querySelectorAll(".x").forEach(b=>b.onclick=()=>close(b.dataset.x));
-wish();loy();renderAgain();renderEvents();tabs();menu();openNow();watch();
+wish();loy();renderAgain();renderEvents();tabs();menu();openNow();setInterval(openNow,30000);watch();
 </script>
 </body>
 </html>
