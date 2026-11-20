@@ -230,7 +230,7 @@ const BARISTA_VK = "295601803";   // id бариста во ВКонтакте (
 // PAY_LINK — платёжная ссылка СБП (из QR-кода, который выдал банк). Пусто и без PAY_QR = оплата выключена.
 // PAY_QR — запасной вариант: данные QR с реквизитами (формат ST00012); сейчас не используется.
 const PAY_QR = "";
-const PAY_LINK = "https://b2b.cbrpay.ru/AS1C00711GFGLPKH9BN8LLC7B0J59U5V";
+const PAY_LINK = "https://qr.nspk.ru/AS1A002SQ576D51M9RLQQSGBONI6Q1H2";
 const BARISTA_WA = "";   // номер для WhatsApp цифрами с кодом страны, например "79991234567"
 // Ссылка с предзаполнением из Google Forms (см. инструкцию): так бариста получает заказы, не раскрывая свои контакты
 const FORM_LINK = "";
@@ -328,11 +328,19 @@ const payHtml=()=>{
   const f=payFields(),amt=due();
   const rows=PAY_QR?[["Сумма",String(amt)],["Получатель",f.Name],["Счёт",f.PersonalAcc],["БИК",f.BIC],["ИНН",f.PayeeINN],["Банк",f.BankName]].filter(r=>r[1]):[];
   const img=PAY_QR?qrImg(payPayload(amt,name)):(PAY_LINK?qrImg(PAY_LINK):"");
-  const qrHelp=PAY_QR?"Отсканируй этот QR в приложении банка с другого телефона. Или зажми картинку, нажми «Сохранить», а в банке выбери оплату по QR из галереи. Сумма и назначение платежа уже внутри.":"Можно отсканировать этот QR в приложении банка с другого телефона. Сумму ("+amt+" ₽) введи вручную.";
-  return `<h2>Оплата заказа</h2><div class="paysum"><small>К оплате</small><b>${amt} ₽</b></div>`+
+  const head=`<h2>Оплата заказа</h2><div class="paysum"><small>К оплате</small><b>${amt} ₽</b></div>`;
+  const tail=`<button class="big" id="paid" disabled>✅ Я оплатил(а)</button><p class="hint">Бариста проверит поступление и примет заказ. Пока оплата не придёт, напиток готовить не начнут.</p><button class="big alt" id="payback">← Назад к заказу</button>`;
+  if(PAY_LINK&&!PAY_QR){
+   return head+
+    `<ol class="st"><li>Открой <b>приложение своего банка</b> и выбери <b>«Оплата по QR»</b>.</li><li>Отсканируй QR ниже с другого телефона или выбери его <b>из галереи</b> (зажми картинку и нажми «Сохранить»).</li><li>Введи сумму <b>${amt} ₽</b> и оплати.</li><li>Вернись сюда и нажми «Я оплатил(а)».</li></ol>`+
+    (img?`<img class="payqr" alt="QR для оплаты по СБП" src="${img}">`:"")+
+    `<button class="big alt" data-copy="${amt}">Скопировать сумму: ${amt}</button>`+
+    `<a class="big alt" id="paylink" href="${esc(PAY_LINK)}" target="_blank" rel="noopener">Открыть ссылку СБП</a><p class="hint">Если браузер покажет предупреждение о незащищённом соединении, это нормально для СБП: надёжнее оплатить через приложение банка по QR.</p>`+tail;
+  }
+  const qrHelp="Отсканируй этот QR в приложении банка с другого телефона. Или зажми картинку, нажми «Сохранить», а в банке выбери оплату по QR из галереи. Сумма и назначение платежа уже внутри.";
+  return head+
    (PAY_LINK?`<a class="big" id="paylink" href="${esc(PAY_LINK)}" target="_blank" rel="noopener">💳 Оплатить по СБП</a><button class="big alt" data-copy="${amt}">Скопировать сумму: ${amt}</button><p class="hint">Откроется приложение банка. Введи сумму <b>${amt} ₽</b> вручную и оплати.</p>`:"")+
-   ((img||rows.length)?`<details class="pay"${PAY_LINK?"":" open"}><summary>${PAY_QR?"Оплата по QR или по реквизитам":"Показать QR-код для сканирования"}</summary>${img?`<img class="payqr" alt="QR для оплаты" src="${img}"><p class="hint" style="text-align:left">${qrHelp}</p>`:""}${rows.map(r=>`<div class="req"><div><span>${r[0]}</span><b>${esc(r[1])}</b></div><button data-copy="${esc(r[1])}">Копировать</button></div>`).join("")}</details>`:"")+
-   `<button class="big" id="paid" disabled>✅ Я оплатил(а)</button><p class="hint">Бариста проверит поступление и примет заказ. Пока оплата не придёт, напиток готовить не начнут.</p><button class="big alt" id="payback">← Назад к заказу</button>`;
+   ((img||rows.length)?`<details class="pay"${PAY_LINK?"":" open"}><summary>Оплата по QR или по реквизитам</summary>${img?`<img class="payqr" alt="QR для оплаты" src="${img}"><p class="hint" style="text-align:left">${qrHelp}</p>`:""}${rows.map(r=>`<div class="req"><div><span>${r[0]}</span><b>${esc(r[1])}</b></div><button data-copy="${esc(r[1])}">Копировать</button></div>`).join("")}</details>`:"")+tail;
  };
  const startPayTimer=()=>{
   let n=5;const b=$("paid");if(!b)return;b.disabled=true;b.textContent="✅ Я оплатил(а) (через 5 с)";clearInterval(payT);
@@ -589,7 +597,7 @@ function openNow(){
  $("shut").innerHTML=o.open?"":`<div>⏰ ${esc(o.msg)}</div>`;
 }
 document.querySelectorAll(".x").forEach(b=>b.onclick=()=>close(b.dataset.x));
-wish();loy();renderAgain();renderEvents();tabs();menu();openNow();setInterval(openNow,30000);watch();
+[wish,loy,renderAgain,renderEvents,tabs,menu,openNow,watch].forEach(function(f){try{f()}catch(e){try{console.error(e)}catch(_){}}});setInterval(function(){try{openNow()}catch(e){}},30000);
 </script>
 </body>
 </html>
